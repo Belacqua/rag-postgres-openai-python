@@ -9,13 +9,14 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from openai.types import CreateEmbeddingResponse, Embedding
-from openai.types.chat import ChatCompletion, ChatCompletionChunk
-from openai.types.chat.chat_completion import (
-    ChatCompletionMessage,
-    Choice,
-)
-from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall, Function
 from openai.types.create_embedding_response import Usage
+from openai.types.responses import (
+    Response,
+    ResponseFunctionToolCall,
+    ResponseOutputMessage,
+    ResponseOutputText,
+    ResponseTextDeltaEvent,
+)
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from fastapi_app import create_app
@@ -63,9 +64,8 @@ def mock_session_env(monkeypatch_session):
         monkeypatch_session.setenv("OPENAI_CHAT_HOST", "azure")
         monkeypatch_session.setenv("OPENAI_EMBED_HOST", "azure")
         monkeypatch_session.setenv("AZURE_OPENAI_ENDPOINT", "https://api.openai.com")
-        monkeypatch_session.setenv("AZURE_OPENAI_VERSION", "2024-03-01-preview")
-        monkeypatch_session.setenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4o-mini")
-        monkeypatch_session.setenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4o-mini")
+        monkeypatch_session.setenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-5.4")
+        monkeypatch_session.setenv("AZURE_OPENAI_CHAT_MODEL", "gpt-5.4")
         monkeypatch_session.setenv("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-large")
         monkeypatch_session.setenv("AZURE_OPENAI_EMBED_MODEL", "text-embedding-3-large")
         monkeypatch_session.setenv("AZURE_OPENAI_EMBED_DIMENSIONS", "1024")
@@ -171,67 +171,39 @@ def mock_openai_embedding(monkeypatch_session):
 
 @pytest.fixture(scope="session")
 def mock_openai_chatcompletion(monkeypatch_session):
-    class AsyncChatCompletionIterator:
+    class AsyncResponseEventIterator:
         def __init__(self, answer: str):
-            chunk_id = "test-id"
-            model = "gpt-4o-mini"
-            self.responses = [
-                {"object": "chat.completion.chunk", "choices": [], "id": chunk_id, "model": model, "created": 1},
-                {
-                    "object": "chat.completion.chunk",
-                    "choices": [{"delta": {"role": "assistant"}, "index": 0, "finish_reason": None}],
-                    "id": chunk_id,
-                    "model": model,
-                    "created": 1,
-                },
-            ]
+            self.events = []
             # Split at << to simulate chunked responses
             if answer.find("<<") > -1:
                 parts = answer.split("<<")
-                self.responses.append(
-                    {
-                        "object": "chat.completion.chunk",
-                        "choices": [
-                            {
-                                "delta": {"role": "assistant", "content": parts[0] + "<<"},
-                                "index": 0,
-                                "finish_reason": None,
-                            }
-                        ],
-                        "id": chunk_id,
-                        "model": model,
-                        "created": 1,
-                    }
+                self.events.append(
+                    ResponseTextDeltaEvent(
+                        type="response.output_text.delta",
+                        content_index=0,
+                        delta=parts[0] + "<<",
+                        item_id="msg-1",
+                        output_index=0,
+                    )
                 )
-                self.responses.append(
-                    {
-                        "object": "chat.completion.chunk",
-                        "choices": [
-                            {"delta": {"role": "assistant", "content": parts[1]}, "index": 0, "finish_reason": None}
-                        ],
-                        "id": chunk_id,
-                        "model": model,
-                        "created": 1,
-                    }
-                )
-                self.responses.append(
-                    {
-                        "object": "chat.completion.chunk",
-                        "choices": [{"delta": {"role": None, "content": None}, "index": 0, "finish_reason": "stop"}],
-                        "id": chunk_id,
-                        "model": model,
-                        "created": 1,
-                    }
+                self.events.append(
+                    ResponseTextDeltaEvent(
+                        type="response.output_text.delta",
+                        content_index=0,
+                        delta=parts[1],
+                        item_id="msg-1",
+                        output_index=0,
+                    )
                 )
             else:
-                self.responses.append(
-                    {
-                        "object": "chat.completion.chunk",
-                        "choices": [{"delta": {"content": answer}, "index": 0, "finish_reason": None}],
-                        "id": chunk_id,
-                        "model": model,
-                        "created": 1,
-                    }
+                self.events.append(
+                    ResponseTextDeltaEvent(
+                        type="response.output_text.delta",
+                        content_index=0,
+                        delta=answer,
+                        item_id="msg-1",
+                        output_index=0,
+                    )
                 )
 
         async def __aenter__(self):
@@ -244,93 +216,88 @@ def mock_openai_chatcompletion(monkeypatch_session):
             return self
 
         async def __anext__(self):
-            if self.responses:
-                return ChatCompletionChunk.model_validate(self.responses.pop(0))
-            else:
-                raise StopAsyncIteration
+            if self.events:
+                return self.events.pop(0)
+            raise StopAsyncIteration
+
+    def _make_text_response(answer: str) -> Response:
+        return Response(
+            id="resp-test-123",
+            created_at=0,
+            model="gpt-5.4",
+            object="response",
+            output=[
+                ResponseOutputMessage(
+                    id="msg-1",
+                    type="message",
+                    role="assistant",
+                    status="completed",
+                    content=[ResponseOutputText(type="output_text", text=answer, annotations=[])],
+                )
+            ],
+            tool_choice="auto",
+            tools=[],
+            status="completed",
+            parallel_tool_calls=True,
+        )
+
+    def _make_tool_call_response(tool_name: str, arguments: str, call_id: str = "fc_abc123") -> Response:
+        return Response(
+            id="resp-test-123",
+            created_at=0,
+            model="gpt-5.4",
+            object="response",
+            output=[
+                ResponseFunctionToolCall(
+                    id=call_id,
+                    call_id=call_id,
+                    type="function_call",
+                    name=tool_name,
+                    arguments=arguments,
+                    status="completed",
+                )
+            ],
+            tool_choice="auto",
+            tools=[],
+            status="completed",
+            parallel_tool_calls=True,
+        )
 
     async def mock_acreate(*args, **kwargs):
-        messages = kwargs["messages"]
-        last_question = messages[-1]["content"]
-        last_role = messages[-1]["role"]
+        input_messages = kwargs.get("input", [])
+        last_message = input_messages[-1]
+        last_content = last_message.get("content", "") if isinstance(last_message, dict) else ""
+        last_role = last_message.get("role", "") if isinstance(last_message, dict) else ""
         if last_role == "tool":
-            items = json.loads(last_question)["items"]
+            items = json.loads(last_content)["items"]
             arguments = {"query": "capital of France", "items": items, "filters": []}
-            return ChatCompletion(
-                object="chat.completion",
-                choices=[
-                    Choice(
-                        message=ChatCompletionMessage(
-                            role="assistant",
-                            tool_calls=[
-                                ChatCompletionMessageToolCall(
-                                    id="call_abc123final",
-                                    type="function",
-                                    function=Function(
-                                        name="final_result",
-                                        arguments=json.dumps(arguments),
-                                    ),
-                                )
-                            ],
-                        ),
-                        finish_reason="stop",
-                        index=0,
-                    )
-                ],
-                id="test-123final",
-                created=0,
-                model="test-model",
+            return _make_tool_call_response("final_result", json.dumps(arguments), call_id="fc_abc123final")
+        if last_content == "Find search results for user query: What is the capital of France?":
+            return _make_tool_call_response(
+                "search_database", '{"search_query":"climbing gear outside"}', call_id="fc_abc123"
             )
-        if last_question == "Find search results for user query: What is the capital of France?":
-            return ChatCompletion(
-                object="chat.completion",
-                choices=[
-                    Choice(
-                        message=ChatCompletionMessage(
-                            role="assistant",
-                            tool_calls=[
-                                ChatCompletionMessageToolCall(
-                                    id="call_abc123",
-                                    type="function",
-                                    function=Function(
-                                        name="search_database", arguments='{"search_query":"climbing gear outside"}'
-                                    ),
-                                )
-                            ],
-                        ),
-                        finish_reason="stop",
-                        index=0,
-                    )
-                ],
-                id="test-123",
-                created=0,
-                model="test-model",
-            )
-        elif last_question == "Find search results for user query: Are interest rates high?":
+        elif last_content == "Find search results for user query: Are interest rates high?":
             answer = "interest rates"
-        elif isinstance(last_question, list) and last_question[2].get("image_url"):
-            answer = "From the provided sources, the impact of interest rates and GDP growth on "
-            "financial markets can be observed through the line graph. [Financial Market Analysis Report 2023-7.png]"
+        elif isinstance(last_content, list) and len(last_content) > 2 and last_content[2].get("image_url"):
+            answer = (
+                "From the provided sources, the impact of interest rates and GDP growth on "
+                "financial markets can be observed through the line graph."
+                " [Financial Market Analysis Report 2023-7.png]"
+            )
         else:
             answer = "The capital of France is Paris. [Benefit_Options-2.pdf]."
-            if messages[0]["content"].find("Generate 3 very brief follow-up questions") > -1:
+            system_content = input_messages[0].get("content", "") if isinstance(input_messages[0], dict) else ""
+            if (
+                isinstance(system_content, str)
+                and system_content.find("Generate 3 very brief follow-up questions") > -1
+            ):
                 answer = "The capital of France is Paris. [Benefit_Options-2.pdf]. <<What is the capital of Spain?>>"
-        if "stream" in kwargs and kwargs["stream"] is True:
-            return AsyncChatCompletionIterator(answer)
+        if kwargs.get("stream") is True:
+            return AsyncResponseEventIterator(answer)
         else:
-            return ChatCompletion(
-                object="chat.completion",
-                choices=[
-                    Choice(
-                        message=ChatCompletionMessage(role="assistant", content=answer), finish_reason="stop", index=0
-                    )
-                ],
-                id="test-123",
-                created=0,
-                model="test-model",
-            )
+            return _make_text_response(answer)
 
-    monkeypatch_session.setattr(openai.resources.chat.completions.AsyncCompletions, "create", mock_acreate)
+    monkeypatch_session.setattr(openai.resources.responses.AsyncResponses, "create", mock_acreate)
 
     yield
 

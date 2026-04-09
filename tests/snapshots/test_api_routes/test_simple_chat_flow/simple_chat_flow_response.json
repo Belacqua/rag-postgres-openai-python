@@ -50,8 +50,8 @@
                     }
                 ],
                 "props": {
-                    "model": "gpt-4o-mini",
-                    "deployment": "gpt-4o-mini"
+                    "model": "gpt-5.4",
+                    "deployment": "gpt-5.4"
                 }
             }
         ],

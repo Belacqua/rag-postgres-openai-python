@@ -24,11 +24,10 @@ class RetrievalMode(str, Enum):
 
 class ChatRequestOverrides(BaseModel):
     top: int = 3
-    temperature: float = 0.3
+    temperature: float = 1
     retrieval_mode: RetrievalMode = RetrievalMode.HYBRID
     use_advanced_flow: bool = True
     prompt_template: Optional[str] = None
-    seed: Optional[int] = None
 
 
 class ChatRequestContext(BaseModel):

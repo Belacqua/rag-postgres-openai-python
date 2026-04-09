@@ -1,8 +1,8 @@
 from collections.abc import AsyncGenerator
-from typing import Optional, Union
+from typing import Optional
 
-from agents import Agent, ItemHelpers, ModelSettings, OpenAIChatCompletionsModel, Runner, set_tracing_disabled
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from agents import Agent, ItemHelpers, ModelSettings, OpenAIResponsesModel, Runner, set_tracing_disabled
+from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputItemParam, ResponseTextDeltaEvent
 
 from fastapi_app.api_models import (
@@ -28,7 +28,7 @@ class SimpleRAGChat(RAGChatBase):
         messages: list[ResponseInputItemParam],
         overrides: ChatRequestOverrides,
         searcher: PostgresSearcher,
-        openai_chat_client: Union[AsyncOpenAI, AsyncAzureOpenAI],
+        openai_chat_client: AsyncOpenAI,
         chat_model: str,
         chat_deployment: Optional[str],  # Not needed for non-Azure OpenAI
     ):
@@ -37,7 +37,7 @@ class SimpleRAGChat(RAGChatBase):
         self.model_for_thoughts = (
             {"model": chat_model, "deployment": chat_deployment} if chat_deployment else {"model": chat_model}
         )
-        openai_agents_model = OpenAIChatCompletionsModel(
+        openai_agents_model = OpenAIResponsesModel(
             model=chat_model if chat_deployment is None else chat_deployment, openai_client=openai_chat_client
         )
         self.answer_agent = Agent(
@@ -47,7 +47,6 @@ class SimpleRAGChat(RAGChatBase):
             model_settings=ModelSettings(
                 temperature=self.chat_params.temperature,
                 max_tokens=self.chat_params.response_token_limit,
-                extra_body={"seed": self.chat_params.seed} if self.chat_params.seed is not None else {},
             ),
         )
 

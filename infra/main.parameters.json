@@ -33,13 +33,13 @@
         "value": "${OPENAI_CHAT_HOST=azure}"
       },
       "chatModelName": {
-        "value": "${AZURE_OPENAI_CHAT_MODEL=gpt-4o-mini}"
+        "value": "${AZURE_OPENAI_CHAT_MODEL=gpt-5.4}"
       },
       "chatDeploymentName": {
-        "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4o-mini}"
+        "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-5.4}"
       },
       "chatDeploymentVersion":{
-        "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT_VERSION=2024-07-18}"
+        "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT_VERSION=2026-03-05}"
       },
       "chatDeploymentSku": {
         "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT_SKU=GlobalStandard}"

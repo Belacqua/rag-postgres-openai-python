@@ -131,7 +131,6 @@ param openAIEmbedHost string = 'azure'
 @secure()
 param openAIComKey string = ''
 
-param azureOpenAIAPIVersion string = '2024-03-01-preview'
 @secure()
 param azureOpenAIKey string = ''
 
@@ -385,10 +384,6 @@ var webAppEnv = union(azureOpenAIKeyEnv, openAIComKeyEnv, [
     name: 'AZURE_OPENAI_ENDPOINT'
     value: !empty(azureOpenAIEndpoint) ? azureOpenAIEndpoint : (deployAzureOpenAI ? openAI.outputs.endpoint : '')
   }
-  {
-    name: 'AZURE_OPENAI_VERSION'
-    value: openAIChatHost == 'azure' ? azureOpenAIAPIVersion : ''
-  }
 ])
 
 module web 'web.bicep' = {
@@ -613,7 +608,6 @@ output AZURE_OPENAI_RESOURCE_GROUP string = deployAzureOpenAI ? openAIResourceGr
 output AZURE_OPENAI_ENDPOINT string = !empty(azureOpenAIEndpoint)
   ? azureOpenAIEndpoint
   : (deployAzureOpenAI ? openAI.outputs.endpoint : '')
-output AZURE_OPENAI_VERSION string = azureOpenAIAPIVersion
 output AZURE_OPENAI_CHAT_DEPLOYMENT string = deployAzureOpenAI ? chatDeploymentName : ''
 output AZURE_OPENAI_CHAT_DEPLOYMENT_VERSION string = deployAzureOpenAI ? chatDeploymentVersion : ''
 output AZURE_OPENAI_CHAT_DEPLOYMENT_CAPACITY int = deployAzureOpenAI ? chatDeploymentCapacity : 0

@@ -1,11 +1,11 @@
 import logging
 import os
 from collections.abc import AsyncGenerator
-from typing import Annotated, Optional, Union
+from typing import Annotated, Optional
 
 import azure.identity
 from fastapi import Depends, Request
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -17,7 +17,7 @@ class OpenAIClient(BaseModel):
     OpenAI client
     """
 
-    client: Union[AsyncOpenAI, AsyncAzureOpenAI]
+    client: AsyncOpenAI
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -51,26 +51,18 @@ async def common_parameters():
         openai_embed_model = os.getenv("OLLAMA_EMBED_MODEL") or "nomic-embed-text"
         openai_embed_dimensions = None
         embedding_column = os.getenv("OLLAMA_EMBEDDING_COLUMN") or "embedding_nomic"
-    elif OPENAI_EMBED_HOST == "github":
-        openai_embed_deployment = None
-        openai_embed_model = os.getenv("GITHUB_EMBED_MODEL") or "openai/text-embedding-3-large"
-        openai_embed_dimensions = int(os.getenv("GITHUB_EMBED_DIMENSIONS", 1024))
-        embedding_column = os.getenv("GITHUB_EMBEDDING_COLUMN") or "embedding_3l"
     else:
         openai_embed_deployment = None
         openai_embed_model = os.getenv("OPENAICOM_EMBED_MODEL") or "text-embedding-3-large"
         openai_embed_dimensions = int(os.getenv("OPENAICOM_EMBED_DIMENSIONS", 1024))
         embedding_column = os.getenv("OPENAICOM_EMBEDDING_COLUMN") or "embedding_3l"
     if OPENAI_CHAT_HOST == "azure":
-        openai_chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT") or "gpt-4o-mini"
-        openai_chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL") or "gpt-4o-mini"
+        openai_chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT") or "gpt-5.4"
+        openai_chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL") or "gpt-5.4"
     elif OPENAI_CHAT_HOST == "ollama":
         openai_chat_deployment = None
         openai_chat_model = os.getenv("OLLAMA_CHAT_MODEL") or "phi3:3.8b"
         openai_embed_model = os.getenv("OLLAMA_EMBED_MODEL") or "nomic-embed-text"
-    elif OPENAI_CHAT_HOST == "github":
-        openai_chat_deployment = None
-        openai_chat_model = os.getenv("GITHUB_MODEL") or "openai/gpt-4o"
     else:
         openai_chat_deployment = None
         openai_chat_model = os.getenv("OPENAICOM_CHAT_MODEL") or "gpt-3.5-turbo"
@@ -84,10 +76,10 @@ async def common_parameters():
     )
 
 
-async def get_azure_credential() -> Union[
-    azure.identity.AzureDeveloperCliCredential, azure.identity.ManagedIdentityCredential
-]:
-    azure_credential: Union[azure.identity.AzureDeveloperCliCredential, azure.identity.ManagedIdentityCredential]
+async def get_azure_credential() -> (
+    azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential
+):
+    azure_credential: azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential
     try:
         if client_id := os.getenv("APP_IDENTITY_ID"):
             # Authenticate using a user-assigned managed identity on Azure
