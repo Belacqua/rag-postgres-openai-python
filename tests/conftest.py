@@ -5,6 +5,7 @@ from unittest import mock
 
 import openai
 import openai.resources
+import openai.resources.responses
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -184,6 +185,8 @@ def mock_openai_chatcompletion(monkeypatch_session):
                         delta=parts[0] + "<<",
                         item_id="msg-1",
                         output_index=0,
+                        logprobs=[],
+                        sequence_number=0,
                     )
                 )
                 self.events.append(
@@ -193,6 +196,8 @@ def mock_openai_chatcompletion(monkeypatch_session):
                         delta=parts[1],
                         item_id="msg-1",
                         output_index=0,
+                        logprobs=[],
+                        sequence_number=1,
                     )
                 )
             else:
@@ -203,6 +208,8 @@ def mock_openai_chatcompletion(monkeypatch_session):
                         delta=answer,
                         item_id="msg-1",
                         output_index=0,
+                        logprobs=[],
+                        sequence_number=0,
                     )
                 )
 
@@ -305,7 +312,7 @@ def mock_openai_chatcompletion(monkeypatch_session):
 @pytest.fixture(scope="function")
 def mock_azure_credential(mock_session_env):
     """Mock the Azure credential for testing."""
-    with mock.patch("azure.identity.AzureDeveloperCliCredential") as mock_azure_credential:
+    with mock.patch("azure.identity.aio.AzureDeveloperCliCredential") as mock_azure_credential:
         mock_azure_credential.return_value = MockAzureCredential()
         yield mock_azure_credential
 

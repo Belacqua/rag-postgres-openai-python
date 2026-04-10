@@ -1,7 +1,6 @@
 import logging
 import os
 
-import azure.identity
 import azure.identity.aio
 import openai
 
@@ -9,7 +8,9 @@ logger = logging.getLogger("ragapp")
 
 
 async def create_openai_chat_client(
-    azure_credential: azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential | None,
+    azure_credential: azure.identity.aio.AzureDeveloperCliCredential
+    | azure.identity.aio.ManagedIdentityCredential
+    | None,
 ) -> openai.AsyncOpenAI:
     openai_chat_client: openai.AsyncOpenAI
     OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
@@ -55,7 +56,9 @@ async def create_openai_chat_client(
 
 
 async def create_openai_embed_client(
-    azure_credential: azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential | None,
+    azure_credential: azure.identity.aio.AzureDeveloperCliCredential
+    | azure.identity.aio.ManagedIdentityCredential
+    | None,
 ) -> openai.AsyncOpenAI:
     openai_embed_client: openai.AsyncOpenAI
     OPENAI_EMBED_HOST = os.getenv("OPENAI_EMBED_HOST")

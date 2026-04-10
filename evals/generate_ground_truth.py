@@ -121,7 +121,7 @@ def generate_ground_truth_data(num_questions_total: int, num_questions_per_sourc
                 {"role": "system", "content": generate_prompt},
                 {"role": "user", "content": json.dumps(source)},
             ],
-            tools=[qa_pairs_tool(num_questions=2)],
+            tools=[qa_pairs_tool(num_questions=2)],  # type: ignore[list-item]
             max_output_tokens=1000,
             store=False,
         )

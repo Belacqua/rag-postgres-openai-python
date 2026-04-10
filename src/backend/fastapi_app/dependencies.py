@@ -3,7 +3,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Annotated, Optional
 
-import azure.identity
+import azure.identity.aio
 from fastapi import Depends, Request
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -77,9 +77,9 @@ async def common_parameters():
 
 
 async def get_azure_credential() -> (
-    azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential
+    azure.identity.aio.AzureDeveloperCliCredential | azure.identity.aio.ManagedIdentityCredential
 ):
-    azure_credential: azure.identity.AzureDeveloperCliCredential | azure.identity.ManagedIdentityCredential
+    azure_credential: azure.identity.aio.AzureDeveloperCliCredential | azure.identity.aio.ManagedIdentityCredential
     try:
         if client_id := os.getenv("APP_IDENTITY_ID"):
             # Authenticate using a user-assigned managed identity on Azure
@@ -88,14 +88,14 @@ async def get_azure_credential() -> (
                 "Using managed identity for client ID %s",
                 client_id,
             )
-            azure_credential = azure.identity.ManagedIdentityCredential(client_id=client_id)
+            azure_credential = azure.identity.aio.ManagedIdentityCredential(client_id=client_id)
         else:
             if tenant_id := os.getenv("AZURE_TENANT_ID"):
                 logger.info("Authenticating to Azure using Azure Developer CLI Credential for tenant %s", tenant_id)
-                azure_credential = azure.identity.AzureDeveloperCliCredential(tenant_id=tenant_id, process_timeout=60)
+                azure_credential = azure.identity.aio.AzureDeveloperCliCredential(tenant_id=tenant_id)
             else:
                 logger.info("Authenticating to Azure using Azure Developer CLI Credential")
-                azure_credential = azure.identity.AzureDeveloperCliCredential(process_timeout=60)
+                azure_credential = azure.identity.aio.AzureDeveloperCliCredential()
         return azure_credential
     except Exception as e:
         logger.warning("Failed to authenticate to Azure: %s", e)

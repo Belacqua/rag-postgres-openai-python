@@ -11,7 +11,7 @@ RAG on PostgreSQL is a Python FastAPI backend with React TypeScript frontend tha
 Install the following tools before beginning development:
 
 - **Python 3.10+** (3.12 recommended)
-- **Node.js 18+** for frontend development  
+- **Node.js 18+** for frontend development
 - **PostgreSQL 14+** with pgvector extension
 - **Azure Developer CLI (azd)** for deployment
 - **Docker Desktop** for dev containers (optional)
@@ -37,7 +37,7 @@ Run these commands in sequence. NEVER CANCEL any long-running commands:
    ```bash
    # Ubuntu/Debian:
    sudo apt update && sudo apt install -y postgresql-16-pgvector
-   
+
    # Start PostgreSQL and set password
    sudo service postgresql start
    sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres'"
@@ -97,7 +97,7 @@ Use "Frontend & Backend" configuration in the VS Code Run & Debug menu.
 ### Linting and Formatting (ALWAYS run before committing)
 ```bash
 ruff check .          # Lint code (takes <1 second)
-ruff format .          # Format code (takes <1 second)  
+ruff format .          # Format code (takes <1 second)
 mypy . --python-version 3.12  # Type check (takes ~42 seconds)
 ```
 
@@ -121,7 +121,7 @@ pytest tests/e2e.py --tracing=retain-on-failure
 **CRITICAL TIMING INFORMATION** - Set these timeout values and NEVER CANCEL:
 
 - **Dependencies install**: 90 seconds (use 180+ second timeout)
-- **Frontend npm install**: 22 seconds (use 60+ second timeout)  
+- **Frontend npm install**: 22 seconds (use 60+ second timeout)
 - **Frontend build**: 12 seconds (use 30+ second timeout)
 - **MyPy type checking**: 42 seconds (use 90+ second timeout)
 - **Full test suite**: 25 seconds (use 60+ second timeout)
@@ -156,7 +156,7 @@ pytest tests/e2e.py --tracing=retain-on-failure
    # Test API endpoints
    curl http://localhost:8000/items/1
    # Should return JSON with item data
-   
+
    # Test frontend
    curl http://localhost:8000/ | head -n 5
    # Should return HTML with "RAG on PostgreSQL" title
@@ -226,9 +226,6 @@ The application supports multiple OpenAI providers:
 3. **Ollama** (local):
    Set `OPENAI_CHAT_HOST=ollama`
 
-4. **GitHub Models**:
-   Set `OPENAI_CHAT_HOST=github`
-
 ## Common Issues and Solutions
 
 ### Database Connection Issues
@@ -267,7 +264,7 @@ Open `http://localhost:8089/` and point to your running application.
 The application provides these REST API endpoints (view full docs at `http://localhost:8000/docs`):
 
 - `GET /items/{id}` - Get specific item by ID
-- `GET /search` - Search items with text query 
+- `GET /search` - Search items with text query
 - `GET /similar` - Find similar items using vector search
 - `POST /chat` - Chat with RAG system (requires OpenAI configuration)
 - `POST /chat/stream` - Streaming chat responses
@@ -286,7 +283,7 @@ curl "http://localhost:8000/search?query=tent&limit=5"
 **Quick ls -la output for repository root:**
 ```
 .devcontainer/          # Dev container configuration
-.env.sample            # Environment variables template  
+.env.sample            # Environment variables template
 .github/               # GitHub Actions workflows
 .gitignore            # Git ignore patterns
 .pre-commit-config.yaml # Pre-commit hook configuration
@@ -309,7 +306,7 @@ tests/        # Test suite
 - **Always build and test locally before committing**
 - **Use pre-commit hooks** - they run ruff automatically
 - **Check the GitHub Actions** in `.github/workflows/` for CI requirements
-- **Reference the full README.md** for deployment and Azure-specific details  
+- **Reference the full README.md** for deployment and Azure-specific details
 - **Use VS Code with the Python and Ruff extensions** for the best development experience
 - **Never skip the frontend build** - the backend serves static files from `src/backend/static/`
 
