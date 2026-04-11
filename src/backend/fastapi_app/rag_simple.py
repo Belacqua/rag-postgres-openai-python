@@ -6,10 +6,8 @@ from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputItemParam, ResponseTextDeltaEvent
 
 from fastapi_app.api_models import (
-    AIChatRoles,
     ChatRequestOverrides,
     ItemPublic,
-    Message,
     RAGContext,
     RetrievalResponse,
     RetrievalResponseDelta,
@@ -90,14 +88,14 @@ class SimpleRAGChat(RAGChatBase):
         )
 
         return RetrievalResponse(
-            message=Message(content=str(run_results.final_output), role=AIChatRoles.ASSISTANT),
+            output_text=str(run_results.final_output),
             context=RAGContext(
                 data_points={item.id: item for item in items},
                 thoughts=earlier_thoughts
                 + [
                     ThoughtStep(
                         title="Prompt to generate answer",
-                        description=[{"content": self.answer_prompt_template}]
+                        description=[{"role": "system", "content": self.answer_prompt_template}]
                         + ItemHelpers.input_to_new_input_list(run_results.input),
                         props=self.model_for_thoughts,
                     ),
@@ -117,13 +115,14 @@ class SimpleRAGChat(RAGChatBase):
         )
 
         yield RetrievalResponseDelta(
+            type="response.context",
             context=RAGContext(
                 data_points={item.id: item for item in items},
                 thoughts=earlier_thoughts
                 + [
                     ThoughtStep(
                         title="Prompt to generate answer",
-                        description=[{"content": self.answer_agent.instructions}]
+                        description=[{"role": "system", "content": self.answer_agent.instructions}]
                         + ItemHelpers.input_to_new_input_list(run_results.input),
                         props=self.model_for_thoughts,
                     ),
@@ -133,5 +132,5 @@ class SimpleRAGChat(RAGChatBase):
 
         async for event in run_results.stream_events():
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                yield RetrievalResponseDelta(delta=Message(content=str(event.data.delta), role=AIChatRoles.ASSISTANT))
+                yield RetrievalResponseDelta(type="response.output_text.delta", delta=str(event.data.delta))
         return

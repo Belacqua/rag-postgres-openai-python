@@ -121,7 +121,7 @@ async def chat_handler(
         rag_flow: Union[SimpleRAGChat, AdvancedRAGChat]
         if chat_request.context.overrides.use_advanced_flow:
             rag_flow = AdvancedRAGChat(
-                messages=chat_request.messages,
+                messages=chat_request.input,
                 overrides=chat_request.context.overrides,
                 searcher=searcher,
                 openai_chat_client=openai_chat.client,
@@ -130,7 +130,7 @@ async def chat_handler(
             )
         else:
             rag_flow = SimpleRAGChat(
-                messages=chat_request.messages,
+                messages=chat_request.input,
                 overrides=chat_request.context.overrides,
                 searcher=searcher,
                 openai_chat_client=openai_chat.client,
@@ -169,7 +169,7 @@ async def chat_stream_handler(
     rag_flow: Union[SimpleRAGChat, AdvancedRAGChat]
     if chat_request.context.overrides.use_advanced_flow:
         rag_flow = AdvancedRAGChat(
-            messages=chat_request.messages,
+            messages=chat_request.input,
             overrides=chat_request.context.overrides,
             searcher=searcher,
             openai_chat_client=openai_chat.client,
@@ -178,7 +178,7 @@ async def chat_stream_handler(
         )
     else:
         rag_flow = SimpleRAGChat(
-            messages=chat_request.messages,
+            messages=chat_request.input,
             overrides=chat_request.context.overrides,
             searcher=searcher,
             openai_chat_client=openai_chat.client,

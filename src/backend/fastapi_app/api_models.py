@@ -5,17 +5,6 @@ from openai.types.responses import ResponseInputItemParam
 from pydantic import BaseModel, Field
 
 
-class AIChatRoles(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-
-
-class Message(BaseModel):
-    content: str
-    role: AIChatRoles = AIChatRoles.USER
-
-
 class RetrievalMode(str, Enum):
     TEXT = "text"
     VECTORS = "vectors"
@@ -35,9 +24,8 @@ class ChatRequestContext(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: list[ResponseInputItemParam]
+    input: list[ResponseInputItemParam]
     context: ChatRequestContext
-    sessionState: Optional[Any] = None
 
 
 class ItemPublic(BaseModel):
@@ -69,7 +57,6 @@ class ThoughtStep(BaseModel):
 class RAGContext(BaseModel):
     data_points: dict[int, ItemPublic]
     thoughts: list[ThoughtStep]
-    followup_questions: Optional[list[str]] = None
 
 
 class ErrorResponse(BaseModel):
@@ -77,15 +64,14 @@ class ErrorResponse(BaseModel):
 
 
 class RetrievalResponse(BaseModel):
-    message: Message
+    output_text: str
     context: RAGContext
-    sessionState: Optional[Any] = None
 
 
 class RetrievalResponseDelta(BaseModel):
-    delta: Optional[Message] = None
+    type: str
+    delta: Optional[str] = None
     context: Optional[RAGContext] = None
-    sessionState: Optional[Any] = None
 
 
 class ChatParams(ChatRequestOverrides):

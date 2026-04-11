@@ -1,5 +1,3 @@
-import { AIChatCompletion, AIChatCompletionDelta, AIChatCompletionOperationOptions } from "@microsoft/ai-chat-protocol";
-
 export const enum RetrievalMode {
     Hybrid = "hybrid",
     Vectors = "vectors",
@@ -18,9 +16,14 @@ export type ChatAppRequestContext = {
     overrides: ChatAppRequestOverrides;
 };
 
-export interface ChatAppRequestOptions extends AIChatCompletionOperationOptions {
-    context: ChatAppRequestContext
-}
+export type ChatAppRequestOptions = {
+    context: ChatAppRequestContext;
+};
+
+export type ChatAppRequest = {
+    input: { content: string; role: string }[];
+    context: ChatAppRequestContext;
+};
 
 export type Thoughts = {
     title: string;
@@ -30,14 +33,17 @@ export type Thoughts = {
 
 export type RAGContext = {
     data_points: { [key: string]: any };
-    followup_questions: string[] | null;
     thoughts: Thoughts[];
 };
 
-export interface RAGChatCompletion extends AIChatCompletion {
+export type RAGChatCompletion = {
+    output_text: string;
     context: RAGContext;
-}
+};
 
-export interface RAGChatCompletionDelta extends AIChatCompletionDelta {
-    context: RAGContext;
-}
+export type RAGChatCompletionDelta = {
+    type: string;
+    delta?: string;
+    context?: RAGContext;
+    error?: string;
+};

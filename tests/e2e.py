@@ -59,10 +59,6 @@ def test_home(page: Page, live_server_url: str):
 def test_chat(page: Page, live_server_url: str):
     # Set up a mock route to the /chat endpoint with streaming results
     def handle(route: Route):
-        # Assert that session_state is specified in the request (None for now)
-        if route.request.post_data_json:
-            session_state = route.request.post_data_json["sessionState"]
-            assert session_state is None
         # Read the JSONL from our snapshot results and return as the response
         f = open(
             "tests/snapshots/test_api_routes/test_advanced_chat_streaming_flow/advanced_chat_streaming_flow_response.jsonlines"

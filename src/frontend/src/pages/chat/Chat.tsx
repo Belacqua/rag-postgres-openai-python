@@ -4,8 +4,8 @@ import { SparkleFilled } from "@fluentui/react-icons";
 
 import styles from "./Chat.module.css";
 
-import { RetrievalMode, RAGChatCompletion, RAGChatCompletionDelta, ChatAppRequestOptions } from "../../api";
-import { AIChatProtocolClient, AIChatMessage } from "@microsoft/ai-chat-protocol";
+import { RetrievalMode, RAGChatCompletion, RAGChatCompletionDelta, ChatAppRequest } from "../../api";
+import readNDJSONStream from "ndjson-readablestream";
 import { Answer, AnswerError, AnswerLoading } from "../../components/Answer";
 import { QuestionInput } from "../../components/QuestionInput";
 import { ExampleList } from "../../components/Example";
@@ -38,24 +38,22 @@ const Chat = () => {
     const [answers, setAnswers] = useState<[user: string, response: RAGChatCompletion][]>([]);
     const [streamedAnswers, setStreamedAnswers] = useState<[user: string, response: RAGChatCompletion][]>([]);
 
-    const handleAsyncRequest = async (question: string, answers: [string, RAGChatCompletion][], result: AsyncIterable<RAGChatCompletionDelta>) => {
+    const handleAsyncRequest = async (question: string, answers: [string, RAGChatCompletion][], responseBody: ReadableStream<Uint8Array>) => {
         let answer = "";
         let chatCompletion: RAGChatCompletion = {
             context: {
                 data_points: {},
-                followup_questions: null,
                 thoughts: []
             },
-            message: { content: "", role: "assistant" }
+            output_text: ""
         };
         const updateState = (newContent: string) => {
             return new Promise(resolve => {
                 setTimeout(() => {
                     answer += newContent;
-                    // We need to create a new object to trigger a re-render
                     const latestCompletion: RAGChatCompletion = {
                         ...chatCompletion,
-                        message: { content: answer, role: chatCompletion.message.role }
+                        output_text: answer
                     };
                     setStreamedAnswers([...answers, [question, latestCompletion]]);
                     resolve(null);
@@ -64,25 +62,21 @@ const Chat = () => {
         };
         try {
             setIsStreaming(true);
-            for await (const response of result) {
-                if (response.context) {
-                    chatCompletion.context = {
-                        ...chatCompletion.context,
-                        ...response.context
-                    };
+            for await (const event of readNDJSONStream<RAGChatCompletionDelta>(responseBody)) {
+                if (event.error) {
+                    throw new Error(event.error);
                 }
-                if (response.delta && response.delta.role) {
-                    chatCompletion.message.role = response.delta.role;
-                }
-                if (response.delta && response.delta.content) {
+                if (event.type === "response.context" && event.context) {
+                    chatCompletion.context = { ...chatCompletion.context, ...event.context };
+                } else if (event.type === "response.output_text.delta" && event.delta !== undefined) {
                     setIsLoading(false);
-                    await updateState(response.delta.content);
+                    await updateState(event.delta);
                 }
             }
         } finally {
             setIsStreaming(false);
         }
-        chatCompletion.message.content = answer;
+        chatCompletion.output_text = answer;
         return chatCompletion;
     };
     const makeApiRequest = async (question: string) => {
@@ -94,12 +88,13 @@ const Chat = () => {
         setActiveAnalysisPanelTab(undefined);
 
         try {
-            const messages: AIChatMessage[] = answers.flatMap(answer => [
+            const messages = answers.flatMap(answer => [
                 { content: answer[0], role: "user" },
-                { content: answer[1].message.content, role: "assistant" }
+                { content: answer[1].output_text, role: "assistant" }
             ]);
-            const allMessages: AIChatMessage[] = [...messages, { content: question, role: "user" }];
-            const options: ChatAppRequestOptions = {
+            const allMessages = [...messages, { content: question, role: "user" }];
+            const request: ChatAppRequest = {
+                input: allMessages,
                 context: {
                     overrides: {
                         use_advanced_flow: useAdvancedFlow,
@@ -108,16 +103,29 @@ const Chat = () => {
                         prompt_template: promptTemplate.length === 0 ? undefined : promptTemplate,
                         temperature: temperature
                     }
-                },
-                sessionState: answers.length ? answers[answers.length - 1][1].sessionState : null
+                }
             };
-            const chatClient: AIChatProtocolClient = new AIChatProtocolClient("/chat");
             if (shouldStream) {
-                const result = (await chatClient.getStreamedCompletion(allMessages, options)) as AsyncIterable<RAGChatCompletionDelta>;
-                const parsedResponse = await handleAsyncRequest(question, answers, result);
+                const response = await fetch("/chat/stream", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(request)
+                });
+                if (!response.ok || !response.body) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+                const parsedResponse = await handleAsyncRequest(question, answers, response.body);
                 setAnswers([...answers, [question, parsedResponse]]);
             } else {
-                const result = (await chatClient.getCompletion(allMessages, options)) as RAGChatCompletion;
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(request)
+                });
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+                const result: RAGChatCompletion = await response.json();
                 setAnswers([...answers, [question, result]]);
             }
         } catch (e) {
@@ -220,7 +228,6 @@ const Chat = () => {
                                                 onCitationClicked={c => onShowCitation(c, index)}
                                                 onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
                                                 onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                onFollowupQuestionClicked={q => makeApiRequest(q)}
                                             />
                                         </div>
                                     </div>
@@ -238,7 +245,6 @@ const Chat = () => {
                                                 onCitationClicked={c => onShowCitation(c, index)}
                                                 onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
                                                 onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                onFollowupQuestionClicked={q => makeApiRequest(q)}
                                             />
                                         </div>
                                     </div>

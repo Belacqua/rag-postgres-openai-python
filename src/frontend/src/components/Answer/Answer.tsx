@@ -15,8 +15,6 @@ interface Props {
     onCitationClicked: (filePath: string) => void;
     onThoughtProcessClicked: () => void;
     onSupportingContentClicked: () => void;
-    onFollowupQuestionClicked?: (question: string) => void;
-    showFollowupQuestions?: boolean;
 }
 
 export const Answer = ({
@@ -25,13 +23,10 @@ export const Answer = ({
     isStreaming,
     onCitationClicked,
     onThoughtProcessClicked,
-    onSupportingContentClicked,
-    onFollowupQuestionClicked,
-    showFollowupQuestions
+    onSupportingContentClicked
 }: Props) => {
     const [isReferencesCollapsed, setIsReferencesCollapsed] = useState(true);
-    const followupQuestions = answer.context.followup_questions;
-    const messageContent = answer.message.content;
+    const messageContent = answer.output_text;
     const parsedAnswer = useMemo(() => parseAnswerToHtml(messageContent, isStreaming, onCitationClicked), [answer]);
 
     const sanitizedAnswerHtml = DOMPurify.sanitize(parsedAnswer.answerHtml);
@@ -87,21 +82,6 @@ export const Answer = ({
                             })}
                         </ol>
                     )}
-                </Stack.Item>
-            )}
-
-            {!!followupQuestions?.length && showFollowupQuestions && onFollowupQuestionClicked && (
-                <Stack.Item>
-                    <Stack horizontal wrap className={`${!!parsedAnswer.citations.length ? styles.followupQuestionsList : ""}`} tokens={{ childrenGap: 6 }}>
-                        <span className={styles.followupQuestionLearnMore}>Follow-up questions:</span>
-                        {followupQuestions.map((x, i) => {
-                            return (
-                                <a key={i} className={styles.followupQuestion} title={x} onClick={() => onFollowupQuestionClicked(x)}>
-                                    {`${x}`}
-                                </a>
-                            );
-                        })}
-                    </Stack>
                 </Stack.Item>
             )}
         </Stack>
