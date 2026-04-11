@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -13,8 +14,8 @@ logger = logging.getLogger("ragapp")
 
 
 async def create_postgres_engine(*, host, username, database, password, sslmode, azure_credential) -> AsyncEngine:
-    def get_password_from_azure_credential():
-        token = azure_credential.get_token("https://ossrdbms-aad.database.windows.net/.default")
+    async def get_password_from_azure_credential():
+        token = await azure_credential.get_token("https://ossrdbms-aad.database.windows.net/.default")
         return token.token
 
     token_based_password = False
@@ -23,7 +24,7 @@ async def create_postgres_engine(*, host, username, database, password, sslmode,
         logger.info("Authenticating to Azure Database for PostgreSQL using Azure Identity...")
         if azure_credential is None:
             raise ValueError("Azure credential must be provided for Azure Database for PostgreSQL")
-        password = get_password_from_azure_credential()
+        password = await get_password_from_azure_credential()
     else:
         logger.info("Authenticating to PostgreSQL using password...")
 
@@ -46,7 +47,8 @@ async def create_postgres_engine(*, host, username, database, password, sslmode,
     def update_password_token(dialect, conn_rec, cargs, cparams):
         if token_based_password:
             logger.info("Updating password token for Azure Database for PostgreSQL")
-            cparams["password"] = get_password_from_azure_credential()
+            loop = asyncio.get_event_loop()
+            cparams["password"] = loop.run_until_complete(get_password_from_azure_credential())
 
     return engine
 
