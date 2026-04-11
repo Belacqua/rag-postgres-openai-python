@@ -175,7 +175,7 @@ def mock_openai_embedding(monkeypatch_session):
 def mock_openai_chatcompletion(monkeypatch_session):
     class AsyncResponseEventIterator:
         def __init__(self, answer: str):
-            self.events = []
+            self.events: list = []
             # Split at << to simulate chunked responses
             if answer.find("<<") > -1:
                 parts = answer.split("<<")
