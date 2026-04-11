@@ -48,6 +48,9 @@ jobs:
             brew install postgresql@14
             brew link --overwrite postgresql@14
             brew install pgvector
+            # pgvector installs into the default PostgreSQL, copy extension files to postgresql@14
+            cp /opt/homebrew/share/postgresql/extension/vector* /opt/homebrew/share/postgresql@14/extension/
+            cp /opt/homebrew/lib/postgresql/vector.dylib /opt/homebrew/lib/postgresql@14/vector.dylib 2>/dev/null || true
             brew services start postgresql@14 && sleep 1
             createuser -s ${{ env.POSTGRES_USERNAME }}
             psql -d postgres -c "ALTER USER ${{ env.POSTGRES_USERNAME }} WITH PASSWORD '${{ env.POSTGRES_PASSWORD }}'"

@@ -13,6 +13,7 @@ from openai.types import CreateEmbeddingResponse, Embedding
 from openai.types.create_embedding_response import Usage
 from openai.types.responses import (
     Response,
+    ResponseCompletedEvent,
     ResponseFunctionToolCall,
     ResponseOutputMessage,
     ResponseOutputText,
@@ -212,12 +213,44 @@ def mock_openai_chatcompletion(monkeypatch_session):
                         sequence_number=0,
                     )
                 )
+            # Agents SDK requires a ResponseCompletedEvent to finalize the stream
+            self.events.append(
+                ResponseCompletedEvent(
+                    type="response.completed",
+                    sequence_number=len(self.events),
+                    response=Response(
+                        id="resp-test-stream",
+                        created_at=0,
+                        model="gpt-5.4",
+                        object="response",
+                        output=[
+                            ResponseOutputMessage(
+                                id="msg-1",
+                                type="message",
+                                role="assistant",
+                                status="completed",
+                                content=[ResponseOutputText(type="output_text", text=answer, annotations=[])],
+                            )
+                        ],
+                        tool_choice="auto",
+                        tools=[],
+                        status="completed",
+                        parallel_tool_calls=True,
+                    ),
+                )
+            )
 
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
+
+        async def close(self):
+            pass
+
+        async def parse(self):
+            return self
 
         def __aiter__(self):
             return self
