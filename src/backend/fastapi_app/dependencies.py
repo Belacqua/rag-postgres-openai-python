@@ -3,6 +3,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Annotated, Optional
 
+import anthropic
 import azure.identity.aio
 from fastapi import Depends, Request
 from openai import AsyncOpenAI
@@ -13,34 +14,25 @@ logger = logging.getLogger("ragapp")
 
 
 class OpenAIClient(BaseModel):
-    """
-    OpenAI client
-    """
-
     client: AsyncOpenAI
     model_config = {"arbitrary_types_allowed": True}
 
 
-class FastAPIAppContext(BaseModel):
-    """
-    Context for the FastAPI app
-    """
+class AnthropicClient(BaseModel):
+    client: anthropic.AsyncAnthropic
+    model_config = {"arbitrary_types_allowed": True}
 
-    openai_chat_model: str
+
+class FastAPIAppContext(BaseModel):
+    anthropic_chat_model: str
     openai_embed_model: str
     openai_embed_dimensions: Optional[int]
-    openai_chat_deployment: Optional[str]
     openai_embed_deployment: Optional[str]
     embedding_column: str
 
 
 async def common_parameters():
-    """
-    Get the common parameters for the FastAPI app
-    Use the pattern of `os.getenv("VAR_NAME") or "default_value"` to avoid empty string values
-    """
     OPENAI_EMBED_HOST = os.getenv("OPENAI_EMBED_HOST")
-    OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
     if OPENAI_EMBED_HOST == "azure":
         openai_embed_deployment = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT") or "text-embedding-3-large"
         openai_embed_model = os.getenv("AZURE_OPENAI_EMBED_MODEL") or "text-embedding-3-large"
@@ -56,21 +48,13 @@ async def common_parameters():
         openai_embed_model = os.getenv("OPENAICOM_EMBED_MODEL") or "text-embedding-3-large"
         openai_embed_dimensions = int(os.getenv("OPENAICOM_EMBED_DIMENSIONS", 1024))
         embedding_column = os.getenv("OPENAICOM_EMBEDDING_COLUMN") or "embedding_3l"
-    if OPENAI_CHAT_HOST == "azure":
-        openai_chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT") or "gpt-5.4"
-        openai_chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL") or "gpt-5.4"
-    elif OPENAI_CHAT_HOST == "ollama":
-        openai_chat_deployment = None
-        openai_chat_model = os.getenv("OLLAMA_CHAT_MODEL") or "phi3:3.8b"
-        openai_embed_model = os.getenv("OLLAMA_EMBED_MODEL") or "nomic-embed-text"
-    else:
-        openai_chat_deployment = None
-        openai_chat_model = os.getenv("OPENAICOM_CHAT_MODEL") or "gpt-3.5-turbo"
+
+    anthropic_chat_model = os.getenv("ANTHROPIC_CHAT_MODEL") or "claude-opus-4-7"
+
     return FastAPIAppContext(
-        openai_chat_model=openai_chat_model,
+        anthropic_chat_model=anthropic_chat_model,
         openai_embed_model=openai_embed_model,
         openai_embed_dimensions=openai_embed_dimensions,
-        openai_chat_deployment=openai_chat_deployment,
         openai_embed_deployment=openai_embed_deployment,
         embedding_column=embedding_column,
     )
@@ -82,12 +66,7 @@ async def get_azure_credential() -> (
     azure_credential: azure.identity.aio.AzureDeveloperCliCredential | azure.identity.aio.ManagedIdentityCredential
     try:
         if client_id := os.getenv("APP_IDENTITY_ID"):
-            # Authenticate using a user-assigned managed identity on Azure
-            # See web.bicep for value of APP_IDENTITY_ID
-            logger.info(
-                "Using managed identity for client ID %s",
-                client_id,
-            )
+            logger.info("Using managed identity for client ID %s", client_id)
             azure_credential = azure.identity.aio.ManagedIdentityCredential(client_id=client_id)
         else:
             if tenant_id := os.getenv("AZURE_TENANT_ID"):
@@ -103,12 +82,7 @@ async def get_azure_credential() -> (
 
 
 async def create_async_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    """Get the agent database"""
-    return async_sessionmaker(
-        engine,
-        expire_on_commit=False,
-        autoflush=False,
-    )
+    return async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
 
 
 async def get_async_sessionmaker(
@@ -117,9 +91,7 @@ async def get_async_sessionmaker(
     yield request.state.sessionmaker
 
 
-async def get_context(
-    request: Request,
-) -> FastAPIAppContext:
+async def get_context(request: Request) -> FastAPIAppContext:
     return request.state.context
 
 
@@ -130,21 +102,15 @@ async def get_async_db_session(
         yield session
 
 
-async def get_openai_chat_client(
-    request: Request,
-) -> OpenAIClient:
-    """Get the OpenAI chat client"""
-    return OpenAIClient(client=request.state.chat_client)
+async def get_anthropic_chat_client(request: Request) -> AnthropicClient:
+    return AnthropicClient(client=request.state.chat_client)
 
 
-async def get_openai_embed_client(
-    request: Request,
-) -> OpenAIClient:
-    """Get the OpenAI embed client"""
+async def get_openai_embed_client(request: Request) -> OpenAIClient:
     return OpenAIClient(client=request.state.embed_client)
 
 
 CommonDeps = Annotated[FastAPIAppContext, Depends(get_context)]
 DBSession = Annotated[AsyncSession, Depends(get_async_db_session)]
-ChatClient = Annotated[OpenAIClient, Depends(get_openai_chat_client)]
+ChatClient = Annotated[AnthropicClient, Depends(get_anthropic_chat_client)]
 EmbeddingsClient = Annotated[OpenAIClient, Depends(get_openai_embed_client)]

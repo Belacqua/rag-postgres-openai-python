@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import Any, Optional
 
-from openai.types.responses import ResponseInputItemParam
 from pydantic import BaseModel, Field
 
 
@@ -24,7 +23,7 @@ class ChatRequestContext(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    input: list[ResponseInputItemParam]
+    input: list[dict]
     context: ChatRequestContext
 
 
@@ -86,7 +85,7 @@ class ChatParams(ChatRequestOverrides):
     enable_text_search: bool
     enable_vector_search: bool
     original_user_query: str
-    past_messages: list[ResponseInputItemParam]
+    past_messages: list[dict]
 
 
 class Filter(BaseModel):

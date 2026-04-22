@@ -1,58 +1,19 @@
 import logging
 import os
 
+import anthropic
 import azure.identity.aio
 import openai
 
 logger = logging.getLogger("ragapp")
 
 
-async def create_openai_chat_client(
-    azure_credential: azure.identity.aio.AzureDeveloperCliCredential
-    | azure.identity.aio.ManagedIdentityCredential
-    | None,
-) -> openai.AsyncOpenAI:
-    openai_chat_client: openai.AsyncOpenAI
-    OPENAI_CHAT_HOST = os.getenv("OPENAI_CHAT_HOST")
-    if OPENAI_CHAT_HOST == "azure":
-        azure_endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-        azure_deployment = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
-        if api_key := os.getenv("AZURE_OPENAI_KEY"):
-            logger.info(
-                "Setting up Azure OpenAI client for chat using API key, endpoint %s, deployment %s",
-                azure_endpoint,
-                azure_deployment,
-            )
-            openai_chat_client = openai.AsyncOpenAI(
-                base_url=f"{azure_endpoint.rstrip('/')}/openai/v1/",
-                api_key=api_key,
-            )
-        elif azure_credential:
-            logger.info(
-                "Setting up Azure OpenAI client for chat using Azure Identity, endpoint %s, deployment %s",
-                azure_endpoint,
-                azure_deployment,
-            )
-            token_provider = azure.identity.aio.get_bearer_token_provider(
-                azure_credential, "https://cognitiveservices.azure.com/.default"
-            )
-            openai_chat_client = openai.AsyncOpenAI(
-                base_url=f"{azure_endpoint.rstrip('/')}/openai/v1/",
-                api_key=token_provider,
-            )
-        else:
-            raise ValueError("Azure OpenAI client requires either an API key or Azure Identity credential.")
-    elif OPENAI_CHAT_HOST == "ollama":
-        logger.info("Setting up OpenAI client for chat using Ollama")
-        openai_chat_client = openai.AsyncOpenAI(
-            base_url=os.getenv("OLLAMA_ENDPOINT"),
-            api_key="nokeyneeded",
-        )
-    else:
-        logger.info("Setting up OpenAI client for chat using OpenAI.com API key")
-        openai_chat_client = openai.AsyncOpenAI(api_key=os.getenv("OPENAICOM_KEY"))
-
-    return openai_chat_client
+async def create_anthropic_chat_client() -> anthropic.AsyncAnthropic:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is required for chat.")
+    logger.info("Setting up Anthropic client for chat")
+    return anthropic.AsyncAnthropic(api_key=api_key)
 
 
 async def create_openai_embed_client(

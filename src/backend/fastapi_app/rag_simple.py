@@ -1,13 +1,11 @@
 from collections.abc import AsyncGenerator
 from typing import Optional
 
-from agents import Agent, ItemHelpers, ModelSettings, OpenAIResponsesModel, Runner, set_tracing_disabled
-from openai import AsyncOpenAI
-from openai.types.responses import ResponseInputItemParam, ResponseTextDeltaEvent
+import anthropic
 
 from fastapi_app.api_models import (
+    CapabilityPublic,
     ChatRequestOverrides,
-    ItemPublic,
     RAGContext,
     RetrievalResponse,
     RetrievalResponseDelta,
@@ -16,49 +14,32 @@ from fastapi_app.api_models import (
 from fastapi_app.postgres_searcher import PostgresSearcher
 from fastapi_app.rag_base import RAGChatBase
 
-set_tracing_disabled(disabled=True)
-
 
 class SimpleRAGChat(RAGChatBase):
     def __init__(
         self,
         *,
-        messages: list[ResponseInputItemParam],
+        messages: list[dict],
         overrides: ChatRequestOverrides,
         searcher: PostgresSearcher,
-        openai_chat_client: AsyncOpenAI,
+        anthropic_chat_client: anthropic.AsyncAnthropic,
         chat_model: str,
-        chat_deployment: Optional[str],  # Not needed for non-Azure OpenAI
+        chat_deployment: Optional[str] = None,
     ):
         self.searcher = searcher
+        self.anthropic_chat_client = anthropic_chat_client
         self.chat_params = self.get_chat_params(messages, overrides)
-        self.model_for_thoughts = (
-            {"model": chat_model, "deployment": chat_deployment} if chat_deployment else {"model": chat_model}
-        )
-        openai_agents_model = OpenAIResponsesModel(
-            model=chat_model if chat_deployment is None else chat_deployment, openai_client=openai_chat_client
-        )
-        self.answer_agent = Agent(
-            name="Answerer",
-            instructions=self.answer_prompt_template,
-            model=openai_agents_model,
-            model_settings=ModelSettings(
-                temperature=self.chat_params.temperature,
-                max_tokens=self.chat_params.response_token_limit,
-            ),
-        )
+        self.chat_model = chat_model
+        self.model_for_thoughts = {"model": chat_model}
 
-    async def prepare_context(self) -> tuple[list[ItemPublic], list[ThoughtStep]]:
-        """Retrieve relevant rows from the database and build a context for the chat model."""
-
+    async def prepare_context(self) -> tuple[list[CapabilityPublic], list[ThoughtStep]]:
         results = await self.searcher.search_and_embed(
             self.chat_params.original_user_query,
             top=self.chat_params.top,
             enable_vector_search=self.chat_params.enable_vector_search,
             enable_text_search=self.chat_params.enable_text_search,
         )
-        items = [ItemPublic.model_validate(item.to_dict()) for item in results]
-
+        items = [CapabilityPublic.model_validate(item.to_dict()) for item in results]
         thoughts = [
             ThoughtStep(
                 title="Search query for database",
@@ -69,50 +50,49 @@ class SimpleRAGChat(RAGChatBase):
                     "text_search": self.chat_params.enable_text_search,
                 },
             ),
-            ThoughtStep(
-                title="Search results",
-                description=items,
-            ),
+            ThoughtStep(title="Search results", description=items),
         ]
         return items, thoughts
 
     async def answer(
         self,
-        items: list[ItemPublic],
+        items: list[CapabilityPublic],
         earlier_thoughts: list[ThoughtStep],
     ) -> RetrievalResponse:
-        run_results = await Runner.run(
-            self.answer_agent,
-            input=self.chat_params.past_messages
-            + [{"content": self.prepare_rag_request(self.chat_params.original_user_query, items), "role": "user"}],
+        rag_content = self.prepare_rag_request(self.chat_params.original_user_query, items)
+        messages = list(self.chat_params.past_messages) + [{"role": "user", "content": rag_content}]
+
+        response = await self.anthropic_chat_client.messages.create(
+            model=self.chat_model,
+            max_tokens=self.chat_params.response_token_limit,
+            temperature=self.chat_params.temperature,
+            system=self.chat_params.prompt_template,
+            messages=messages,
         )
+        output_text = response.content[0].text
 
         return RetrievalResponse(
-            output_text=str(run_results.final_output),
+            output_text=output_text,
             context=RAGContext(
                 data_points={item.id: item for item in items},
                 thoughts=earlier_thoughts
                 + [
                     ThoughtStep(
                         title="Prompt to generate answer",
-                        description=[{"role": "system", "content": self.answer_prompt_template}]
-                        + ItemHelpers.input_to_new_input_list(run_results.input),
+                        description=[{"role": "system", "content": self.chat_params.prompt_template}] + messages,
                         props=self.model_for_thoughts,
-                    ),
+                    )
                 ],
             ),
         )
 
     async def answer_stream(
         self,
-        items: list[ItemPublic],
+        items: list[CapabilityPublic],
         earlier_thoughts: list[ThoughtStep],
     ) -> AsyncGenerator[RetrievalResponseDelta, None]:
-        run_results = Runner.run_streamed(
-            self.answer_agent,
-            input=self.chat_params.past_messages
-            + [{"content": self.prepare_rag_request(self.chat_params.original_user_query, items), "role": "user"}],
-        )
+        rag_content = self.prepare_rag_request(self.chat_params.original_user_query, items)
+        messages = list(self.chat_params.past_messages) + [{"role": "user", "content": rag_content}]
 
         yield RetrievalResponseDelta(
             type="response.context",
@@ -122,15 +102,19 @@ class SimpleRAGChat(RAGChatBase):
                 + [
                     ThoughtStep(
                         title="Prompt to generate answer",
-                        description=[{"role": "system", "content": self.answer_agent.instructions}]
-                        + ItemHelpers.input_to_new_input_list(run_results.input),
+                        description=[{"role": "system", "content": self.chat_params.prompt_template}] + messages,
                         props=self.model_for_thoughts,
-                    ),
+                    )
                 ],
             ),
         )
 
-        async for event in run_results.stream_events():
-            if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                yield RetrievalResponseDelta(type="response.output_text.delta", delta=str(event.data.delta))
-        return
+        async with self.anthropic_chat_client.messages.stream(
+            model=self.chat_model,
+            max_tokens=self.chat_params.response_token_limit,
+            temperature=self.chat_params.temperature,
+            system=self.chat_params.prompt_template,
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield RetrievalResponseDelta(type="response.output_text.delta", delta=text)

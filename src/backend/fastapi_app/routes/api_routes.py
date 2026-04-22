@@ -30,23 +30,16 @@ ERROR_FILTER = {"error": "Your message contains content that was flagged by the 
 
 
 async def format_as_ndjson(r: AsyncGenerator[RetrievalResponseDelta, None]) -> AsyncGenerator[str, None]:
-    """
-    Format the response as NDJSON
-    """
     try:
         async for event in r:
             yield event.model_dump_json() + "\n"
     except Exception as error:
-        if isinstance(error, APIError) and error.code == "content_filter":
-            yield json.dumps(ERROR_FILTER) + "\n"
-        else:
-            logging.exception("Exception while generating response stream: %s", error)
-            yield json.dumps({"error": str(error)}, ensure_ascii=False) + "\n"
+        logging.exception("Exception while generating response stream: %s", error)
+        yield json.dumps({"error": str(error)}, ensure_ascii=False) + "\n"
 
 
 @router.get("/capabilities/{id}", response_model=CapabilityPublic)
 async def capability_handler(database_session: DBSession, id: int) -> CapabilityPublic:
-    """A simple API to get a capability by ID."""
     item = (await database_session.scalars(select(Capability).where(Capability.id == id))).first()
     if not item:
         raise HTTPException(detail=f"Capability with ID {id} not found.", status_code=404)
@@ -57,7 +50,6 @@ async def capability_handler(database_session: DBSession, id: int) -> Capability
 async def similar_handler(
     context: CommonDeps, database_session: DBSession, id: int, n: int = 5
 ) -> list[CapabilityWithDistance]:
-    """A similarity API to find capabilities similar to the one with given ID."""
     item = (await database_session.scalars(select(Capability).where(Capability.id == id))).first()
     if not item:
         raise HTTPException(detail=f"Capability with ID {id} not found.", status_code=404)
@@ -85,8 +77,7 @@ async def search_handler(
     top: int = 5,
     enable_vector_search: bool = True,
     enable_text_search: bool = True,
-) -> list[ItemPublic]:
-    """A search API to find items based on a query."""
+) -> list[CapabilityPublic]:
     searcher = PostgresSearcher(
         db_session=database_session,
         openai_embed_client=openai_embed.client,
@@ -106,7 +97,7 @@ async def chat_handler(
     context: CommonDeps,
     database_session: DBSession,
     openai_embed: EmbeddingsClient,
-    openai_chat: ChatClient,
+    anthropic_chat: ChatClient,
     chat_request: ChatRequest,
 ):
     try:
@@ -124,29 +115,24 @@ async def chat_handler(
                 messages=chat_request.input,
                 overrides=chat_request.context.overrides,
                 searcher=searcher,
-                openai_chat_client=openai_chat.client,
-                chat_model=context.openai_chat_model,
-                chat_deployment=context.openai_chat_deployment,
+                anthropic_chat_client=anthropic_chat.client,
+                chat_model=context.anthropic_chat_model,
             )
         else:
             rag_flow = SimpleRAGChat(
                 messages=chat_request.input,
                 overrides=chat_request.context.overrides,
                 searcher=searcher,
-                openai_chat_client=openai_chat.client,
-                chat_model=context.openai_chat_model,
-                chat_deployment=context.openai_chat_deployment,
+                anthropic_chat_client=anthropic_chat.client,
+                chat_model=context.anthropic_chat_model,
             )
 
         items, thoughts = await rag_flow.prepare_context()
         response = await rag_flow.answer(items=items, earlier_thoughts=thoughts)
         return response
     except Exception as e:
-        if isinstance(e, APIError) and e.code == "content_filter":
-            return ERROR_FILTER
-        else:
-            logging.exception("Exception while generating response: %s", e)
-            return {"error": str(e)}
+        logging.exception("Exception while generating response: %s", e)
+        return {"error": str(e)}
 
 
 @router.post("/chat/stream")
@@ -154,7 +140,7 @@ async def chat_stream_handler(
     context: CommonDeps,
     database_session: DBSession,
     openai_embed: EmbeddingsClient,
-    openai_chat: ChatClient,
+    anthropic_chat: ChatClient,
     chat_request: ChatRequest,
 ):
     searcher = PostgresSearcher(
@@ -172,35 +158,25 @@ async def chat_stream_handler(
             messages=chat_request.input,
             overrides=chat_request.context.overrides,
             searcher=searcher,
-            openai_chat_client=openai_chat.client,
-            chat_model=context.openai_chat_model,
-            chat_deployment=context.openai_chat_deployment,
+            anthropic_chat_client=anthropic_chat.client,
+            chat_model=context.anthropic_chat_model,
         )
     else:
         rag_flow = SimpleRAGChat(
             messages=chat_request.input,
             overrides=chat_request.context.overrides,
             searcher=searcher,
-            openai_chat_client=openai_chat.client,
-            chat_model=context.openai_chat_model,
-            chat_deployment=context.openai_chat_deployment,
+            anthropic_chat_client=anthropic_chat.client,
+            chat_model=context.anthropic_chat_model,
         )
 
     try:
-        # Intentionally do search we stream down the answer, to avoid using database connections during stream
-        # See https://github.com/tiangolo/fastapi/discussions/11321
         items, thoughts = await rag_flow.prepare_context()
         result = rag_flow.answer_stream(items, thoughts)
         return StreamingResponse(content=format_as_ndjson(result), media_type="application/x-ndjson")
     except Exception as e:
-        if isinstance(e, APIError) and e.code == "content_filter":
-            return StreamingResponse(
-                content=json.dumps(ERROR_FILTER) + "\n",
-                media_type="application/x-ndjson",
-            )
-        else:
-            logging.exception("Exception while generating response: %s", e)
-            return StreamingResponse(
-                content=json.dumps({"error": str(e)}, ensure_ascii=False) + "\n",
-                media_type="application/x-ndjson",
-            )
+        logging.exception("Exception while generating response: %s", e)
+        return StreamingResponse(
+            content=json.dumps({"error": str(e)}, ensure_ascii=False) + "\n",
+            media_type="application/x-ndjson",
+        )
