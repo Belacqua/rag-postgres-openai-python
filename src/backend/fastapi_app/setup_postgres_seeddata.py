@@ -14,15 +14,15 @@ from fastapi_app.postgres_engine import (
     create_postgres_engine_from_args,
     create_postgres_engine_from_env,
 )
-from fastapi_app.postgres_models import Item
+from fastapi_app.postgres_models import Capability
 
 logger = logging.getLogger("ragapp")
 
 
 async def seed_data(engine):
-    # Check if Item table exists
+    # Check if Capability table exists
     async with engine.begin() as conn:
-        table_name = Item.__tablename__
+        table_name = Capability.__tablename__
         result = await conn.execute(
             text(
                 f"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table_name}')"  # noqa
@@ -38,12 +38,18 @@ async def seed_data(engine):
         with open(os.path.join(current_dir, "seed_data.json")) as f:
             seed_data_objects = json.load(f)
             for seed_data_object in seed_data_objects:
-                db_item = await session.execute(select(Item).filter(Item.id == seed_data_object["id"]))
+                db_item = await session.execute(select(Capability).filter(Capability.id == seed_data_object["id"]))
                 if db_item.scalars().first():
                     continue
                 attrs = {key: value for key, value in seed_data_object.items()}
-                attrs["embedding_3l"] = np.array(seed_data_object["embedding_3l"])
-                attrs["embedding_nomic"] = np.array(seed_data_object["embedding_nomic"])
+                if seed_data_object.get("embedding_3l"):
+                    attrs["embedding_3l"] = np.array(seed_data_object["embedding_3l"])
+                else:
+                    attrs.pop("embedding_3l", None)
+                if seed_data_object.get("embedding_nomic"):
+                    attrs["embedding_nomic"] = np.array(seed_data_object["embedding_nomic"])
+                else:
+                    attrs.pop("embedding_nomic", None)
                 column_names = ", ".join(attrs.keys())
                 values = ", ".join([f":{key}" for key in attrs.keys()])
                 await session.execute(text(f"INSERT INTO {table_name} ({column_names}) VALUES ({values})"), attrs)

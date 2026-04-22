@@ -10,15 +10,15 @@ from openai import APIError
 from sqlalchemy import select, text
 
 from fastapi_app.api_models import (
+    CapabilityPublic,
+    CapabilityWithDistance,
     ChatRequest,
     ErrorResponse,
-    ItemPublic,
-    ItemWithDistance,
     RetrievalResponse,
     RetrievalResponseDelta,
 )
 from fastapi_app.dependencies import ChatClient, CommonDeps, DBSession, EmbeddingsClient
-from fastapi_app.postgres_models import Item
+from fastapi_app.postgres_models import Capability
 from fastapi_app.postgres_searcher import PostgresSearcher
 from fastapi_app.rag_advanced import AdvancedRAGChat
 from fastapi_app.rag_simple import SimpleRAGChat
@@ -44,28 +44,28 @@ async def format_as_ndjson(r: AsyncGenerator[RetrievalResponseDelta, None]) -> A
             yield json.dumps({"error": str(error)}, ensure_ascii=False) + "\n"
 
 
-@router.get("/items/{id}", response_model=ItemPublic)
-async def item_handler(database_session: DBSession, id: int) -> ItemPublic:
-    """A simple API to get an item by ID."""
-    item = (await database_session.scalars(select(Item).where(Item.id == id))).first()
+@router.get("/capabilities/{id}", response_model=CapabilityPublic)
+async def capability_handler(database_session: DBSession, id: int) -> CapabilityPublic:
+    """A simple API to get a capability by ID."""
+    item = (await database_session.scalars(select(Capability).where(Capability.id == id))).first()
     if not item:
-        raise HTTPException(detail=f"Item with ID {id} not found.", status_code=404)
-    return ItemPublic.model_validate(item.to_dict())
+        raise HTTPException(detail=f"Capability with ID {id} not found.", status_code=404)
+    return CapabilityPublic.model_validate(item.to_dict())
 
 
-@router.get("/similar", response_model=list[ItemWithDistance])
+@router.get("/similar", response_model=list[CapabilityWithDistance])
 async def similar_handler(
     context: CommonDeps, database_session: DBSession, id: int, n: int = 5
-) -> list[ItemWithDistance]:
-    """A similarity API to find items similar to items with given ID."""
-    item = (await database_session.scalars(select(Item).where(Item.id == id))).first()
+) -> list[CapabilityWithDistance]:
+    """A similarity API to find capabilities similar to the one with given ID."""
+    item = (await database_session.scalars(select(Capability).where(Capability.id == id))).first()
     if not item:
-        raise HTTPException(detail=f"Item with ID {id} not found.", status_code=404)
+        raise HTTPException(detail=f"Capability with ID {id} not found.", status_code=404)
 
     closest = (
         await database_session.execute(
             text(
-                f"SELECT *, {context.embedding_column} <=> :embedding as DISTANCE FROM {Item.__tablename__} "
+                f"SELECT *, {context.embedding_column} <=> :embedding as DISTANCE FROM {Capability.__tablename__} "
                 "WHERE id <> :item_id ORDER BY distance LIMIT :n"
             ),
             {"embedding": getattr(item, context.embedding_column), "n": n, "item_id": id},
@@ -73,10 +73,10 @@ async def similar_handler(
     ).fetchall()
 
     items = [dict(row._mapping) for row in closest]
-    return [ItemWithDistance.model_validate(item) for item in items]
+    return [CapabilityWithDistance.model_validate(item) for item in items]
 
 
-@router.get("/search", response_model=list[ItemPublic])
+@router.get("/search", response_model=list[CapabilityPublic])
 async def search_handler(
     context: CommonDeps,
     database_session: DBSession,
@@ -98,7 +98,7 @@ async def search_handler(
     results = await searcher.search_and_embed(
         query, top=top, enable_vector_search=enable_vector_search, enable_text_search=enable_text_search
     )
-    return [ItemPublic.model_validate(item.to_dict()) for item in results]
+    return [CapabilityPublic.model_validate(item.to_dict()) for item in results]
 
 
 @router.post("/chat", response_model=Union[RetrievalResponse, ErrorResponse])

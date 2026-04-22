@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_app.api_models import Filter
 from fastapi_app.embeddings import compute_text_embedding
-from fastapi_app.postgres_models import Item
+from fastapi_app.postgres_models import Capability
 
 
 class PostgresSearcher:
@@ -47,7 +47,7 @@ class PostgresSearcher:
         filters: Optional[list[Filter]] = None,
     ):
         filter_clause_where, filter_clause_and = self.build_filter_clause(filters)
-        table_name = Item.__tablename__
+        table_name = Capability.__tablename__
         vector_query = f"""
             SELECT id, RANK () OVER (ORDER BY {self.embedding_column} <=> :embedding) AS rank
                 FROM {table_name}
@@ -57,10 +57,10 @@ class PostgresSearcher:
             """
 
         fulltext_query = f"""
-            SELECT id, RANK () OVER (ORDER BY ts_rank_cd(to_tsvector('english', description), query) DESC)
+            SELECT id, RANK () OVER (ORDER BY ts_rank_cd(to_tsvector('english', subcategory_description), query) DESC)
                 FROM {table_name}, plainto_tsquery('english', :query) query
-                WHERE to_tsvector('english', description) @@ query {filter_clause_and}
-                ORDER BY ts_rank_cd(to_tsvector('english', description), query) DESC
+                WHERE to_tsvector('english', subcategory_description) @@ query {filter_clause_and}
+                ORDER BY ts_rank_cd(to_tsvector('english', subcategory_description), query) DESC
                 LIMIT 20
             """
 
@@ -100,7 +100,7 @@ class PostgresSearcher:
         # Convert results to SQLAlchemy models
         row_models = []
         for id, _ in results[:top]:
-            item = await self.db_session.execute(select(Item).where(Item.id == id))
+            item = await self.db_session.execute(select(Capability).where(Capability.id == id))
             row_models.append(item.scalar())
         return row_models
 

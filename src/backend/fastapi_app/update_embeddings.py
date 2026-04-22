@@ -12,7 +12,7 @@ from fastapi_app.dependencies import common_parameters, get_azure_credential
 from fastapi_app.embeddings import compute_text_embedding
 from fastapi_app.openai_clients import create_openai_embed_client
 from fastapi_app.postgres_engine import create_postgres_engine_from_env
-from fastapi_app.postgres_models import Item
+from fastapi_app.postgres_models import Capability
 
 logger = logging.getLogger("ragapp")
 
@@ -40,7 +40,7 @@ async def update_embeddings(in_seed_data=False):
             for seed_data_object in seed_data_objects:
                 # for each column in the JSON, store it in the same named attribute in the object
                 attrs = {key: value for key, value in seed_data_object.items()}
-                row = Item(**attrs)
+                row = Capability(**attrs)
                 embedding = await compute_text_embedding(
                     row.to_str_for_embedding(),
                     openai_client=openai_embed_client,
@@ -57,7 +57,7 @@ async def update_embeddings(in_seed_data=False):
 
     async with async_sessionmaker(engine, expire_on_commit=False)() as session:
         async with session.begin():
-            rows_to_update = (await session.scalars(select(Item))).all()
+            rows_to_update = (await session.scalars(select(Capability))).all()
 
             for row_model in rows_to_update:
                 setattr(

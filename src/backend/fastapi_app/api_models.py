@@ -28,19 +28,25 @@ class ChatRequest(BaseModel):
     context: ChatRequestContext
 
 
-class ItemPublic(BaseModel):
+class CapabilityPublic(BaseModel):
     id: int
-    type: str
-    brand: str
-    name: str
-    description: str
-    price: float
+    subcategory_name: str
+    subcategory_description: str
+    classification_name: str
+    category_name: str
+    naics_code: Optional[str] = None
 
     def to_str_for_rag(self):
-        return f"Name:{self.name} Description:{self.description} Price:{self.price} Brand:{self.brand} Type:{self.type}"
+        return (
+            f"Classification:{self.classification_name} "
+            f"Category:{self.category_name} "
+            f"Subcategory:{self.subcategory_name} "
+            f"Description:{self.subcategory_description} "
+            f"NAICS:{self.naics_code}"
+        )
 
 
-class ItemWithDistance(ItemPublic):
+class CapabilityWithDistance(CapabilityPublic):
     distance: float
 
     def __init__(self, **data):
@@ -55,7 +61,7 @@ class ThoughtStep(BaseModel):
 
 
 class RAGContext(BaseModel):
-    data_points: dict[int, ItemPublic]
+    data_points: dict[int, CapabilityPublic]
     thoughts: list[ThoughtStep]
 
 
@@ -89,24 +95,19 @@ class Filter(BaseModel):
     value: Any
 
 
-class PriceFilter(Filter):
-    column: str = Field(default="price", description="The column to filter on (always 'price' for this filter)")
-    comparison_operator: str = Field(description="The operator for price comparison ('>', '<', '>=', '<=', '=')")
-    value: float = Field(description="The price value to compare against (e.g., 30.00)")
+class ClassificationFilter(Filter):
+    column: str = Field(default="classification_name", description="Always 'classification_name'")
+    comparison_operator: str = Field(description="Operator for comparison ('=' or '!=')")
+    value: str = Field(description="Classification name, e.g. 'IT Services' or 'Professional Services'")
 
 
-class BrandFilter(Filter):
-    column: str = Field(default="brand", description="The column to filter on (always 'brand' for this filter)")
-    comparison_operator: str = Field(description="The operator for brand comparison ('=' or '!=')")
-    value: str = Field(description="The brand name to compare against (e.g., 'AirStrider')")
+class CategoryFilter(Filter):
+    column: str = Field(default="category_name", description="Always 'category_name'")
+    comparison_operator: str = Field(description="Operator for comparison ('=' or '!=')")
+    value: str = Field(description="Category name, e.g. 'Engineering' or 'Analytics'")
 
 
 class SearchResults(BaseModel):
     query: str
-    """The original search query"""
-
-    items: list[ItemPublic]
-    """List of items that match the search query and filters"""
-
+    items: list[CapabilityPublic]
     filters: list[Filter]
-    """List of filters applied to the search results"""
